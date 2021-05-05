@@ -1,0 +1,9 @@
+---
+title: My Blog Post
+author: Gareth Meredith
+date: '2021-05-05'
+slug: my-blog-post
+categories: []
+tags: []
+description: ''
+---
