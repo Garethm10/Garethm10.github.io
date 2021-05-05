@@ -1,0 +1,258 @@
+---
+title: "Project 1: Covid Vaccination Response"
+author: "Gareth Meredith"
+date: "4/4/2021"
+pubdate: "4/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center", 
+    warning = F, message = F, tidy = TRUE, tidy.opts = list(width.cutoff = 60), 
+    R.options = list(max.print = 100))
+```
+
+## Introduction
+
+In this R markdown document, I will be exploring the Covid vaccination response of all countries of the world and how the demographics of these countries impact their responses. To do this, I will first need a relatively up-to-date dataset containing Covid vaccination data for the whole world. Luckily for me, the website kaggle had precisely the dataset I was looking for. In addition to this vaccinations dataset, I needed a dataset containing as much demographic information as possible for each country of the world. For this, once again kaggle had my back.
+
+With the two datasets I needed decided upon, I will now describe my plan for analyzing this data. Since the dataset resulting from the merging of these two dataframes will be huge, I've decided that for all analysis that does not depend on time I will filter the dataset down to a uniform date, March 1st. This step is a neccessity, especially when summarizing based on region/country, because one country may have an entry for every day between Jan 1st and March 1st so summarizing over all those entries has the strong potential to produce inaccurate results.
+
+With all that being said, I'm very excited to get started on this analysis and to share my results. I anticipate that more developed nations will see a markedly better vaccination response than less developed nations, but, the interesting thing about this Covid-19 pandemic is that it's tough to infer about something that is unprecedented. 
+
+```{R message=FALSE, warning=FALSE}
+library(tidyverse)
+library(stringr)
+```
+
+## The Datasets
+
+```{R}
+countries <- read.csv("countries of the world.csv")
+vaccinations <- read.csv("country_vaccinations.csv")
+
+glimpse(countries)
+glimpse(vaccinations)
+```
+
+```{R}
+# Fix formatting of country name strings
+countries$Country <- str_squish(countries$Country)
+countries$Region <- str_squish(countries$Region)
+```
+*Fixed formatting of country name strings to remove any leading or trailing whitespace that would interfere with joining*
+
+```{R}
+#remove days during which no new vaccination data was collected 
+vaccinations <- vaccinations[complete.cases(vaccinations[,4]), ]
+vaccinations$date <- as.Date(vaccinations$date)
+```
+*Removed days during which no new vaccination data was collected. Also converted date strings to date objects in the vaccinations dataframe*
+
+```{R}
+#change countries dataframe column names to something more manageable
+dfc_names = c("Country", "Region", "Population", "area_sq_mi", "pop_density", "coastline", "net_migration", "infant_mortality", "GDP_per_capita", "literacy", "phones", "arable_land", "crops", "other", "climate", "birthrate", "deathrate", "agriculture", "industry", "service")
+
+names(countries) = dfc_names
+names(vaccinations)[1] = "Country"
+```
+
+*Change column titles of countries dataframe to make them more palatable*
+
+```{R}
+#convert strings in form x,xx to numeric values with the form x.xx
+for(i in 5:20) {
+  countries[,i] <- as.numeric(gsub(",",".", gsub("\\.", "", countries[,i])))
+}
+```
+
+*Convert strings in form x,xx to numeric values with the form x.xx*
+
+## Joining
+
+```{R}
+#Left join our two datasets to create a dataframe consisting of covid vaccine information as well as country demographic information
+
+covid_data <- left_join(vaccinations, countries, by = "Country")
+
+#Mutate to create pct_vaccinated variable. This variable represents the percentage of the total population that has been vaccinated
+
+covid_data <- covid_data %>% mutate(pct_vaccinated = 100*(people_vaccinated/Population), na.rm = T)
+
+glimpse(covid_data)
+```
+
+*Here, I chose to perform a left_join with vaccinations being the 'left' dataframe and countries being the 'right' dataframe. I chose this join primarily because for what I wish to inspect, the vaccination data is of more importance. Furthermore, since the vaccinations dataframe has multiple entries for each country (because entries are facetted by date) there is a much lower chance of loss of data with the countries dataframe than the vaccinations dataframe. The way I thought about it is I was tacking on country demographics for each country's daily vaccination entry.*
+
+## Dataset Inspection
+
+```{R warning = FALSE}
+#total number of people vaccinated per country, per day
+Daily_vaccinations <- covid_data %>% select(c("Country", "date", "daily_vaccinations")) %>% pivot_wider(., names_from = "Country", values_from = daily_vaccinations)
+head(Daily_vaccinations,5)
+```
+
+*Pivoting wider produces a strange version of the dataset in which columns are countries and rows are dates.*
+
+```{R}
+#Easily inspect the temporal vaccination response of each country with one line of code
+Daily_vaccinations[,c("date","United States")]
+```
+
+*This line of code allows for easy inspection of the temporal daily vaccination response of any country. I included this specific manipulation initially as a means of displaying my use of pivot_wider, but, after further inspection I found it be very useful and easy to explore. *
+
+```{R}
+#average vaccinations taking place per day, per country
+Daily_vaccinations %>% summarise_all(list(mean = mean, sd = sd), na.rm=T) %>% .[,-1] %>% pivot_longer(contains("_")) %>% separate(name, sep = "_", into = c("Country", "Statistic")) %>% pivot_wider(., names_from = Statistic, values_from = value) %>% arrange(Country)
+```
+
+*This manipulation creates summary statistics (mean and standard deviation) of the raw daily vaccinations occurring in each country.*
+
+```{R warning=FALSE}
+covid_data %>% filter(date == as.Date("2021-03-01")) %>% select(Country, Region, where(is.numeric)) %>% group_by(Region) %>% summarise_if(is.numeric, list(cheesemean = mean, cheesesd = sd, cheesemin = min, cheesemax = max), na.rm = T) %>% pivot_longer(contains("cheese")) %>% separate(name, sep="cheese", into = c("variable","statistic")) %>% pivot_wider(., names_from = statistic, values_from = value) %>% arrange(Region) -> summary_stats
+
+glimpse(summary_stats)
+```
+
+*This manipulation goes 10 steps further and creates summary statistics (mean, standard deviation, min, max) for all numeric data in the Covid dataset, grouped by geographical region.*
+
+```{R}
+summary_stats %>% filter(variable == "total_vaccinations_")
+```
+
+*Here is how one would navigate this summary_stats dataframe.*
+
+```{R warning=FALSE}
+covid_data %>% filter(date == as.Date("2021-03-01")) %>% filter(Region != is.na(.)) %>% ggplot(aes(Region, fill=Region)) + geom_bar(aes(y=pct_vaccinated), stat = "summary", fun = mean, na.rm = T)+ theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1)) + labs(title = "Average Percentage of Population Vaccinated", subtitle = "Faceted by Geographic Region") + ylab("Mean % Vaccinated")
+```
+
+*This plot visualizes the state of covid vaccinations in each region as of March 1st. The plot does this by filtering the data down to just March 1st entries then performing a nested stat="summary" in a geom_bar object. The final result is the bar plot seen above where each category is a geographical region of the world and the corresponding y value is the average percentage of the population vaccinated for countries within those respective regions. This plot was very interesting to me because it shows us trends which are somewhat counter-intuitive. For Starters, as you can see the near east is doing particularly well with their vaccinations, sitting at an average of ~43% vaccinated. This value is driven heavily by Israel who as of March 1st had ~75% of their population vaccinated which is one of the best vaccination percentages of any country. This, coupled with the fact that other Middle East countries have large gaps in their Covid data (or just no data all together), lead to this drastically exaggerated bar. A similar phenomena occurs with the sub-saharan africa bin. While a majority of sub-saharan african countries were sitting below 1% vaccinated as of March 1st, the country of Seyechelles had vaccinated ~70% of their 98k person population, thus drastically skewing this bar.*
+
+```{R warning=FALSE, message=FALSE}
+#data faceted by vaccine type
+
+covid_data %>% filter(date == as.Date("2021-03-01")) %>% select(Country, vaccines, where(is.numeric)) %>% separate_rows(vaccines,sep = ",") %>% group_by(vaccines) -> vaccine_data
+
+vaccine_data$vaccines <- str_squish(vaccine_data$vaccines)
+```
+
+*Moving on, I now wanted to explore my data as a function of the vaccine type. In order to do this I needed to manipulate my master covid_data dateset into a dataframe facetted by vaccine. The issue with this arose when I realized that the vaccine column of my covid_data dataframe included all vaccines used by a country in list form, separated with commas. In order to fix this and reshape the dataset to include an entry for each vaccine used by a certain country, I had to utilize the separate_rows() function as well as our old friend str_squish().*
+
+```{R warning=FALSE, message=FALSE}
+vaccine_data %>% summarise(mean_pct_vaccinated = mean(pct_vaccinated, na.rm=T), mean_gdp = mean(GDP_per_capita, na.rm=T), mean_literacy = mean(literacy, na.rm=T)) %>% .[complete.cases(.),] -> vaccine_data_summarized
+
+vaccine_data_summarized
+```
+
+*Starting with our large vaccine_data dataframe, which includes all numeric columns from the original dataframe, I filtered down the data such that the two most important (in my non-anthropoligist opinion) demographic indicators were left as well as the percentage of the population vaccinated. After this, I grouped by vaccine and using summarise(), computed average values for these demographic indicators. The indicators I chose were GDP per capita and literacy rate because I felt that of all the demographic statistics that could define the affluence of a country, those two were the best. The reason I have limited myself to three variables is because I wish to represent the differences in the vaccines' target demographics in 3d space*
+
+```{R warning=FALSE, message=FALSE}
+library(plotly)
+
+plot_ly(x = vaccine_data_summarized$mean_pct_vaccinated, y= vaccine_data_summarized$mean_gdp, z= vaccine_data_summarized$mean_literacy, type = "scatter3d", mode = "markers", color = vaccine_data_summarized$vaccines) %>% layout(title = "Covid Vaccines and their Distribution", scene = list(xaxis = list(title = "pct vaccinated"), yaxis = list(title = "GDP"), zaxis = list(title = "Literacy rate")))
+
+```
+
+*Above is the aforementioned plot of the vaccines as a function of demographic indicators. From this plot we may infer several conclusions about the vaccines and their target demographics. For starters, we may observe that the Covaxin vaccine is targeted towards poorer, more developing countries as it is low on all three variables. In opposition, the Johnson & Johnson vaccine sits in the opposite corner of the plot with the highest average GDP, Literacy rate, and percentage vaccinated. The reason for this outlier is simple, the Johnson & Johnson vaccine, as of March 1st, was only available in the United States. Ignoring this outlier, we can see that of the more widespread vaccines, the Moderna vaccine serves, on average, the most affluent nations.*
+
+## Correlation Heatmap
+
+```{R message=FALSE, warning=FALSE}
+#correlation heatmap
+library(reshape2)
+
+temp_data <- covid_data %>% filter(date == as.Date("2021-03-01")) %>% .[complete.cases(.),] %>% select(c(4,12,17,19,21,22,23,24,30,31,32,33,34,35))
+```
+
+*Now, it is time to make our correlation heatmap. To do this, I filtered my dataset down again to only March 1st entries. I then painstakingly went through my dataset and maually picked the demographic and Covid variables that I felt would be best represented by the correlation heatmap. I did this because certain columns such as coastline (proportion of border that is coast) aren't of immediate importance to my analysis. Furthermore, since my dataset has so many numeric variables I didn't want my heatmap and its axes to be too cluttered.*
+
+```{R message=FALSE, warning=FALSE}
+cormat <- round(cor(temp_data),2)
+head(cormat)
+
+melted_cormat <- melt(cormat)
+melted_cormat %>% ggplot(aes(Var1, Var2, fill=value)) + geom_tile() + theme(axis.text.x = element_text(angle = 55, hjust = 1)) + scale_fill_gradient2(low= "red", high = "blue")
+```
+
+*Here is the resulting correlation heatmap. In order to limit myself from writing a novel on this plot, I will focus only on the most interesting relationships I've observed. The first thing that stood out to me was literacy rate and GDP per capita's nearly identical strong inverse correlations with the rest of the variables. These kind of relationships show the power of these two variables and are the reason why I chose to represent the vaccines as functions of these variables in the previous plot. Moving on, another trend that stood out to me was that the percentage of a country's population that is vaccinated is not strongly correlated with really anything, aside from daily vaccinations per million obviously. This result was highly unexpected to be honest. I expected that at the very least percent vaccinated would be somewhat correlated with literacy, gdp, and infant_mortality but that simply isn't the case. I think what I've learned from this is that the worldwide vaccine roll-out is not nearly as well defined as we would like. The same trends that always seem to hold true are breaking down as a result of this unprecedented situation.*
+
+## K Means Clustering
+
+```{R}
+# k-means clustering
+covid_data %>% filter(date == as.Date("2021-03-01")) %>% select(GDP_per_capita, literacy, infant_mortality) %>% .[complete.cases(.), ] %>% kmeans(4) -> kmeans1
+```
+
+*Here I performed my K-means clustering on the Demographic variables GDP per capita, literacy rate, and infant mortality. I chose to perform my clustering on these variables because, according to my correlation heatmap above, they have the strongest correlations with the rest of the dataset. Furthermore, my goal of this clustering is to divide the nations of the world into 4 different groups representing different stages of development and in order to do so, these demographic variables are of the most importance.*
+
+```{R message=FALSE, warning=FALSE}
+library(plotly)
+
+covid_data %>% filter(date == as.Date("2021-03-01"))%>% select(Country, Region, Population, GDP_per_capita, literacy, infant_mortality) %>% .[complete.cases(.), ] %>% mutate(cluster = as.factor(kmeans1$cluster)) -> kmeans2
+
+plot_ly(kmeans2, x= ~GDP_per_capita, y= ~literacy, z= ~infant_mortality, type="scatter3d", mode="markers", color= ~cluster) -> kmeans_plot
+
+kmeans_plot <- kmeans_plot %>% layout(title = "k means clustering of Country Demographics")
+
+kmeans_plot
+
+```
+
+*Above we may observe the results of our clustering. This clustering follows a very expected pattern with countries becoming more 'developed' as they approach the nearest corner of the plot coinciding with high GDP, high literacy rate, and low infant mortality. An interesting thing to note is that the clusters are primarily divided along the GDP axis. This indicates that GDP per capita is the primary deciding factor in the 'development' of a nation. Another interesting thing to note is that high infant mortality is a phenomena experienced by almost exclusively the least 'developed' countries and these countries have it incredibly bad.*
+
+```{R}
+kmeans2  %>% group_by(cluster) %>% summarise(countries = n_distinct(Country), regions = n_distinct(Region), avg_gdp = mean(GDP_per_capita, na.rm = T), avg_infant_mortality = mean(infant_mortality, na.rm=T), avg_literacy_rate = mean(literacy, na.rm=T))
+```
+
+*Here is a table summarizing the demographics of each cluster.*
+
+
+## Who is in What Cluster?
+```{R}
+#cluster 1
+kmeans2 %>% select(Country,cluster) %>% filter(cluster == 1)
+```
+
+```{R}
+#cluster 2
+kmeans2 %>% select(Country,cluster) %>% filter(cluster == 2)
+```
+
+```{R}
+#cluster 3
+kmeans2 %>% select(Country,cluster) %>% filter(cluster == 3)
+```
+
+```{R}
+#cluster 4
+kmeans2 %>% select(Country,cluster) %>% filter(cluster == 4)
+```
+
+
+```{R message=FALSE, warning=FALSE}
+require(maps)
+require(viridis)
+
+world_map <- map_data("world")
+
+world_map <- world_map %>% mutate(region = case_when(region == "USA" ~ "United States", region != "USA" ~ region))
+
+world_data <- right_join(kmeans2, world_map, by = c("Country" = "region"))
+```
+
+*Okay, so I know the instructions said don't get carried away, but that's exactly what I did. These plots could meet the ggplotting requirements since I just realized my two 3d plots are not, in fact, ggplots. Regardless, here I set out to plot our clusters on the world map that way we could visualize the distribution of 1st, 2nd and 3rd world nations as well as hyper-developed nations. To do this I used the package maps and specifically its world map dataframe. I then joined that dataframe with my kmeans2 dataframe to introduce the clusters variable into the world map dataframe. The issue that I ran into with this was how that dataframe named its geographic regions, more specifically, the discrepancies in country naming for the two datasets. I got around this issue for the case of the United States, as seen above, but I was unable to do this for the entire dataframe as it would involve manually finding and fixing all of the discrepancies.*
+
+```{R message=FALSE, warning=FALSE}
+ggplot(world_data, aes(x = long, y = lat, group = group)) +
+  geom_polygon(aes(fill=cluster), colour = "white") + labs(title = "Clusters of the World", subtitle = "Cluster = Level of Development") + scale_x_continuous(breaks=seq(-200,200,50))
+```
+
+*Here is the resulting plot of the world with the country's color representing which cluster that nation fell into. Grey countries are countries for which the right_join could not produce a match. Inspecting this plot we can see that the clustered groupings of nations falls strongly in line with nations' widely understood levels of development. For instance, we can see that most of western europe and north america fall into the same cluster while most of eastern europe and south america fall into a cluster of their own.*
+
+```{R message=FALSE, warning=FALSE}
+ggplot(world_data, aes(x = long, y = lat, group = group)) +
+  geom_polygon(aes(fill=GDP_per_capita), colour = "white") + scale_fill_gradient(name = "GDP per Capita", trans = "log") + labs(title="GDP Per Capita of the World")
+```
+
+*Here is a plot to compare to the previous clustered plot. This plot has nations shaded by their GDP. Inspecting the similarities between the clusters in the previous plot and the shades of blue on this plot, we can further reinforce the understanding of GDP as a strong indicator of a nation's level of development.*
+

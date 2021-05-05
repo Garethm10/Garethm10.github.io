@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Gareth Meredith</title>
+    <link>/</link>
+    <description>Recent content on Gareth Meredith</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-US</language>
+    <lastBuildDate>Thu, 23 Jul 2015 21:13:14 -0500</lastBuildDate><atom:link href="/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Hello R Markdown</title>
+      <link>/post/2015/07/23/hello-r-markdown/</link>
+      <pubDate>Thu, 23 Jul 2015 21:13:14 -0500</pubDate>
+      
+      <guid>/post/2015/07/23/hello-r-markdown/</guid>
+      <description>R MarkdownThis is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see http://rmarkdown.rstudio.com.
+You can embed an R code chunk like this:
+summary(cars)## speed dist ## Min. : 4.0 Min. : 2.00 ## 1st Qu.:12.0 1st Qu.: 26.00 ## Median :15.0 Median : 36.00 ## Mean :15.4 Mean : 42.98 ## 3rd Qu.</description>
+    </item>
+    
+    <item>
+      <title>Project 1: Covid Vaccination Response</title>
+      <link>/project/project1/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/project/project1/</guid>
+      <description>IntroductionIn this R markdown document, I will be exploring the Covid vaccination response of all countries of the world and how the demographics of these countries impact their responses. To do this, I will first need a relatively up-to-date dataset containing Covid vaccination data for the whole world. Luckily for me, the website kaggle had precisely the dataset I was looking for. In addition to this vaccinations dataset, I needed a dataset containing as much demographic information as possible for each country of the world.</description>
+    </item>
+    
+    <item>
+      <title>Project 2: Don&#39;t Need No Weatherman To Know When It Will Rain In Australia</title>
+      <link>/project/project2/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/project/project2/</guid>
+      <description>Don’t Need No Weatherman To Know When It Will Rain In AustraliaIntroducing our Datalibrary(dplyr)weather &amp;lt;- read.csv(&amp;quot;weatherAUS.csv&amp;quot;)weather &amp;lt;- weather[,c(1,2,3,4,5,6,7,8,9,22,23)]weather &amp;lt;- weather[complete.cases(weather), ] %&amp;gt;% mutate(Rain = ifelse(RainToday == &amp;quot;Yes&amp;quot;, 1, 0))weather &amp;lt;- weather %&amp;gt;% mutate(AvgTemp = (MaxTemp-MinTemp)/2)class_diag&amp;lt;-function(probs,truth, cutoff){tab&amp;lt;-table(factor(probs&amp;gt;cutoff,levels=c(&amp;quot;FALSE&amp;quot;,&amp;quot;TRUE&amp;quot;)),truth)acc=sum(diag(tab))/sum(tab)sens=tab[2,2]/colSums(tab)[2]spec=tab[1,1]/colSums(tab)[1]ppv=tab[2,2]/rowSums(tab)[2]if(is.numeric(truth)==FALSE &amp;amp; is.logical(truth)==FALSE) truth&amp;lt;-as.numeric(truth)-1#CALCULATE EXACT AUCord&amp;lt;-order(probs, decreasing=TRUE)probs &amp;lt;- probs[ord]; truth &amp;lt;- truth[ord]TPR=cumsum(truth)/max(1,sum(truth)) FPR=cumsum(!truth)/max(1,sum(!truth))dup&amp;lt;-c(probs[-1]&amp;gt;=probs[-length(probs)], FALSE)TPR&amp;lt;-c(0,TPR[!dup],1); FPR&amp;lt;-c(0,FPR[!dup],1)n &amp;lt;- length(TPR)auc&amp;lt;- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )data.</description>
+    </item>
+    
+    <item>
+      <title>Projects</title>
+      <link>/projects/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/projects/</guid>
+      <description>Here are my Projects: Wrangling &amp;amp; Exploratory Data Analysis
+ Modeling, Inference, Prediction
+  --</description>
+    </item>
+    
+    <item>
+      <title>Resume</title>
+      <link>/resume/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/resume/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>

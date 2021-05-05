@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="Gareth Meredith" />
+    
+    <link rel="shortcut icon" type="image/x-icon" href="/img/favicon.ico">
+    <title>Project 2: Don&#39;t Need No Weatherman To Know When It Will Rain In Australia</title>
+    <meta name="generator" content="Hugo 0.83.1" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <link rel="stylesheet" type="text/css" href="/css/main.css" />
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" />
+    <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,400,200bold,400old" />
+    
+    <!--[if lt IE 9]>
+			<script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+			<script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+		<![endif]-->
+
+    
+  </head>
+
+  <body>
+    <div id="wrap">
+      
+      <nav class="navbar navbar-default">
+  <div class="container">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="/"><i class="fa fa-home"></i></a>
+      <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+    </div>
+    <div class="navbar-collapse collapse" id="navbar">
+      <ul class="nav navbar-nav navbar-right">
+      
+        
+        <li><a href="/post/">BLOG</a></li>
+        
+        <li><a href="/project/">PROJECTS</a></li>
+        
+        <li><a href="/resume/">RESUME</a></li>
+        
+      
+      </ul>
+    </div>
+  </div>
+</nav>
+
+      <div class="container">
+        <div class="blog-post">
+          <h3>
+            <strong><a href="/project/project2/">Project 2: Don&#39;t Need No Weatherman To Know When It Will Rain In Australia</a></strong>
+          </h3>
+        </div>
+ 
+<div class="blog-title">
+          <h4>
+         January 1, 0001 
+            &nbsp;&nbsp;
+            
+          </h4>
+        </div>
+
+        <div class="panel panel-default">
+          <div class="panel-body">
+            <div class="blogpost">
+              
+
+
+<div id="dont-need-no-weatherman-to-know-when-it-will-rain-in-australia" class="section level1">
+<h1>Don’t Need No Weatherman To Know When It Will Rain In Australia</h1>
+<div id="introducing-our-data" class="section level2">
+<h2>Introducing our Data</h2>
+<pre class="r"><code>library(dplyr)
+
+weather &lt;- read.csv(&quot;weatherAUS.csv&quot;)
+weather &lt;- weather[,c(1,2,3,4,5,6,7,8,9,22,23)]
+weather &lt;- weather[complete.cases(weather), ] %&gt;% mutate(Rain = ifelse(RainToday == &quot;Yes&quot;, 1, 0))
+weather &lt;- weather %&gt;% mutate(AvgTemp = (MaxTemp-MinTemp)/2)
+
+class_diag&lt;-function(probs,truth, cutoff){
+  
+  tab&lt;-table(factor(probs&gt;cutoff,levels=c(&quot;FALSE&quot;,&quot;TRUE&quot;)),truth)
+  acc=sum(diag(tab))/sum(tab)
+  sens=tab[2,2]/colSums(tab)[2]
+  spec=tab[1,1]/colSums(tab)[1]
+  ppv=tab[2,2]/rowSums(tab)[2]
+
+  if(is.numeric(truth)==FALSE &amp; is.logical(truth)==FALSE) truth&lt;-as.numeric(truth)-1
+  
+  #CALCULATE EXACT AUC
+  ord&lt;-order(probs, decreasing=TRUE)
+  probs &lt;- probs[ord]; truth &lt;- truth[ord]
+  
+  TPR=cumsum(truth)/max(1,sum(truth)) 
+  FPR=cumsum(!truth)/max(1,sum(!truth))
+  
+  dup&lt;-c(probs[-1]&gt;=probs[-length(probs)], FALSE)
+  TPR&lt;-c(0,TPR[!dup],1); FPR&lt;-c(0,FPR[!dup],1)
+  
+  n &lt;- length(TPR)
+  auc&lt;- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )
+
+  data.frame(acc,sens,spec,ppv,auc)
+}</code></pre>
+<p><em>The dataset I chose for this project was a dataset entitled ‘Rain in Australia’. This dataset contains daily information about weather parameters such as min and max temperature, amount of sunshine received, amount of evaporation experienced, and wind speed and direction for all of Australia’s 28 major cities from the span November 2007 to June 2017. After removing rows containing NA’s, the dataset has 65961 total observations which averages to about 2356 observations per major city. My hopes with this dataset is to create a prediction model that will be able to accurately predict whether or not it will rain on a given day in Australia based solely on location and simple weather parameters.</em></p>
+</div>
+<div id="manova-and-anova-testing" class="section level2">
+<h2>MANOVA and ANOVA Testing</h2>
+<pre class="r"><code>library(rstatix)
+library(dplyr)
+library(tidyverse)
+
+group &lt;- weather$Location
+DVs &lt;- weather %&gt;% select_if(is.numeric)
+
+#lapply(split(DVs,group), cov)
+man1 &lt;- manova(cbind(MinTemp, MaxTemp, Sunshine, WindGustSpeed, Evaporation)~RainToday, data=weather)
+summary(man1)</code></pre>
+<pre><code>##              Df  Pillai approx F num Df den Df    Pr(&gt;F)    
+## RainToday     1 0.19583   3212.3      5  65955 &lt; 2.2e-16 ***
+## Residuals 65959                                             
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<p><em>Results of MANOVA test are significant, therefore, we will test unvariate ANOVAs next.</em></p>
+<pre class="r"><code>summary.aov(man1)</code></pre>
+<pre><code>##  Response MinTemp :
+##                Df  Sum Sq Mean Sq F value    Pr(&gt;F)    
+## RainToday       1    5484  5484.1  133.25 &lt; 2.2e-16 ***
+## Residuals   65959 2714647    41.2                      
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response MaxTemp :
+##                Df  Sum Sq Mean Sq F value    Pr(&gt;F)    
+## RainToday       1  170368  170368  3647.9 &lt; 2.2e-16 ***
+## Residuals   65959 3080489      47                      
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response Sunshine :
+##                Df Sum Sq Mean Sq F value    Pr(&gt;F)    
+## RainToday       1  97473   97473  7622.2 &lt; 2.2e-16 ***
+## Residuals   65959 843487      13                      
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response WindGustSpeed :
+##                Df   Sum Sq Mean Sq F value    Pr(&gt;F)    
+## RainToday       1   253227  253227  1429.9 &lt; 2.2e-16 ***
+## Residuals   65959 11680652     177                      
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response Evaporation :
+##                Df Sum Sq Mean Sq F value    Pr(&gt;F)    
+## RainToday       1  41147   41147  3119.5 &lt; 2.2e-16 ***
+## Residuals   65959 870016      13                      
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<p><em>All DVs are significant, therefore we conclude that the weather does differ on days when it rains compared to days when it doesn’t … duhhhh lol.</em></p>
+<pre class="r"><code>weather %&gt;% group_by(RainToday) %&gt;% summarise(mean(MinTemp), mean(MaxTemp), mean(Sunshine), mean(WindGustSpeed), mean(Evaporation))</code></pre>
+<pre><code>## # A tibble: 2 x 6
+##   RainToday `mean(MinTemp)` `mean(MaxTemp)` `mean(Sunshine)` `mean(WindGustSpee~
+##   &lt;chr&gt;               &lt;dbl&gt;           &lt;dbl&gt;            &lt;dbl&gt;               &lt;dbl&gt;
+## 1 No                   12.8            24.6             8.29                39.5
+## 2 Yes                  13.5            20.8             5.36                44.2
+## # ... with 1 more variable: mean(Evaporation) &lt;dbl&gt;</code></pre>
+<pre class="r"><code>pairwise.t.test(weather$MinTemp,weather$RainToday,  p.adj = &quot;none&quot;) </code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  weather$MinTemp and weather$RainToday 
+## 
+##     No    
+## Yes &lt;2e-16
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(weather$MaxTemp,weather$RainToday,  p.adj = &quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  weather$MaxTemp and weather$RainToday 
+## 
+##     No    
+## Yes &lt;2e-16
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(weather$Sunshine,weather$RainToday,  p.adj = &quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  weather$Sunshine and weather$RainToday 
+## 
+##     No    
+## Yes &lt;2e-16
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(weather$WindGustSpeed,weather$RainToday,  p.adj = &quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  weather$WindGustSpeed and weather$RainToday 
+## 
+##     No    
+## Yes &lt;2e-16
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(weather$Evaporation,weather$RainToday,  p.adj = &quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  weather$Evaporation and weather$RainToday 
+## 
+##     No    
+## Yes &lt;2e-16
+## 
+## P value adjustment method: none</code></pre>
+<p><em>We performed 1 MANOVA test, 5 ANOVA tests, and 5 pairwise t-tests for a total of 11 tests. Therefore, our significance level we must use will be alpha = 0.05/11 = 4.54e-3. Despite using this decreased significance level, all test statistics still remain significant</em></p>
+<pre class="r"><code>library(ggplot2)
+weather %&gt;% ggplot(aes(MinTemp, MaxTemp)) + geom_point(alpha=0.5) + geom_density_2d(h=2) + coord_fixed() + facet_wrap(~RainToday)</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<pre class="r"><code>weather %&gt;% ggplot(aes(Sunshine, Evaporation, color = WindGustSpeed)) + geom_point(alpha=0.5) + geom_density_2d(h=2) + facet_wrap(~RainToday) + scale_color_viridis_c(option=&quot;magma&quot;)</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-5-2.png" width="672" />
+<em>From the plots above we can see that our MANOVA normality assumption is not really met since the variables do not appear to follow a normal distribution about a mean point. Furthermore, the plots show have some extreme outliers, specifically in the evaporation vs sunshine plot, which again is in direct opposition to our MANOVA assumptions. Finally, though a linear relationship does exist between min and max temp, it does not exist for all of the DV’s which once again goes against our MANOVA assumptions.</em></p>
+</div>
+<div id="randomized-test" class="section level2">
+<h2>Randomized Test</h2>
+<p><em>Difference of mean daily temperature on days when it rains vs days when it does not rain.</em></p>
+<pre class="r"><code>weather_samp &lt;- weather[sample(nrow(weather),5000),]
+
+weather_samp %&gt;% ggplot(aes(RainToday, AvgTemp, fill = factor(RainToday))) + geom_boxplot() + stat_summary(fun = mean, color=&quot;black&quot;, geom = &quot;point&quot;, size=4, show.legend = F) + scale_fill_discrete(name = &quot;Did it Rain?&quot;) + xlab(NULL) + ggtitle(&quot;Distribution of Average Daily Temperature&quot;)</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-6-1.png" width="672" />
+<em>We can see from the plot above that there appears to be a difference in the average temperature on days when it rains vs. days when it does not. This difference exists in both the mean and variances of average daily temperatures between rainy and non-rainy days.</em></p>
+<pre class="r"><code>ttest &lt;- t.test(AvgTemp ~ RainToday, data=weather_samp)
+wtest &lt;- wilcox.test(AvgTemp ~ RainToday, data=weather_samp)
+
+ttest</code></pre>
+<pre><code>## 
+##  Welch Two Sample t-test
+## 
+## data:  AvgTemp by RainToday
+## t = 37.106, df = 2814.5, p-value &lt; 2.2e-16
+## alternative hypothesis: true difference in means is not equal to 0
+## 95 percent confidence interval:
+##  2.117549 2.353830
+## sample estimates:
+##  mean in group No mean in group Yes 
+##          5.920107          3.684418</code></pre>
+<pre class="r"><code>wtest</code></pre>
+<pre><code>## 
+##  Wilcoxon rank sum test with continuity correction
+## 
+## data:  AvgTemp by RainToday
+## W = 3315953, p-value &lt; 2.2e-16
+## alternative hypothesis: true location shift is not equal to 0</code></pre>
+<p><em>Both our difference in means t-test and our nonparametric wilcox tests tell us to reject the null hypothesis. Therefore we must conclude that mean Average Temperature for days when it rains is different than the average temperature on days when it does not. Our test statistics are a gargantuan t = 37.821 and W = 3339461 and our p-values are both &lt;2.2e-16.</em></p>
+</div>
+<div id="linear-model-predicting-rainfall-amount-from-average-daily-temperature-and-sunshine-recieved" class="section level2">
+<h2>Linear Model Predicting Rainfall Amount from Average Daily Temperature and Sunshine Recieved</h2>
+<pre class="r"><code>library(interactions)
+
+lin_model &lt;- lm(Rainfall~AvgTemp*Sunshine, data=weather)
+summary(lin_model)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = Rainfall ~ AvgTemp * Sunshine, data = weather)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -10.028  -1.992  -0.825  -0.086 197.525 
+## 
+## Coefficients:
+##                  Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)      10.02776    0.12290   81.59   &lt;2e-16 ***
+## AvgTemp          -1.35302    0.02919  -46.36   &lt;2e-16 ***
+## Sunshine         -0.67800    0.01537  -44.12   &lt;2e-16 ***
+## AvgTemp:Sunshine  0.09738    0.00296   32.90   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 6.448 on 65957 degrees of freedom
+## Multiple R-squared:  0.09223,    Adjusted R-squared:  0.09219 
+## F-statistic:  2234 on 3 and 65957 DF,  p-value: &lt; 2.2e-16</code></pre>
+<pre class="r"><code>interact_plot(model = lin_model, pred = AvgTemp, modx = Sunshine, interval = TRUE, int.type = &quot;confidence&quot;, int.width = .8) + labs(title = &quot;Interaction Plot of our Linear Model&quot;) + scale_y_continuous(breaks= seq(-10,10,2)) + scale_x_continuous(breaks = seq(0,20,2))</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<pre class="r"><code>weather %&gt;% ggplot(aes(Sunshine, Rainfall, color=AvgTemp)) + geom_point()</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-8-2.png" width="672" /></p>
+<pre class="r"><code>weather %&gt;% ggplot(aes(AvgTemp, Rainfall, color = Sunshine)) + geom_point()</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-8-3.png" width="672" /></p>
+<pre class="r"><code>resids &lt;- lin_model$residuals
+ggplot()+geom_histogram(aes(resids),bins = 50)+ xlim(c(-25,50))</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-8-4.png" width="672" /></p>
+<pre class="r"><code>ks.test(resids, &quot;pnorm&quot;, mean=0, sd(resids))</code></pre>
+<pre><code>## 
+##  One-sample Kolmogorov-Smirnov test
+## 
+## data:  resids
+## D = 0.30377, p-value &lt; 2.2e-16
+## alternative hypothesis: two-sided</code></pre>
+<p><em>The coefficients of our model determine how our model interacts with input data. For a day with an average temperature of 0c and 0 hrs of sunshine, the predicted amount of rainfall will be 10.03cm (intercept). For every subsequent increase of 1c in average temperature, the predicted rainfall decreases by 1.353cm. For every 1 hr increase in sunshine, the predicted amount of rainfall decreases by 0.67cm. From observing the interaction plot above, and the coefficient for avgtemp:sunshine, we can see that the effect of the average temperature on the predicted rainfall decreases as sunshine increases. </em></p>
+<p><em>The proportion of variance in outcome that this model explains is 0.09219, which is the coefficient of determination (r^2).</em></p>
+<p><em>Based off of the plots above, neither homoskedasticity, linearity, nor normality have been met. Therefore, we will recompute the regression results with robust standard errors.</em></p>
+<pre class="r"><code>library(sandwich)
+library(lmtest)
+
+bptest(lin_model)</code></pre>
+<pre><code>## 
+##  studentized Breusch-Pagan test
+## 
+## data:  lin_model
+## BP = 961.05, df = 3, p-value &lt; 2.2e-16</code></pre>
+<pre class="r"><code>summary(lin_model)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = Rainfall ~ AvgTemp * Sunshine, data = weather)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -10.028  -1.992  -0.825  -0.086 197.525 
+## 
+## Coefficients:
+##                  Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)      10.02776    0.12290   81.59   &lt;2e-16 ***
+## AvgTemp          -1.35302    0.02919  -46.36   &lt;2e-16 ***
+## Sunshine         -0.67800    0.01537  -44.12   &lt;2e-16 ***
+## AvgTemp:Sunshine  0.09738    0.00296   32.90   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 6.448 on 65957 degrees of freedom
+## Multiple R-squared:  0.09223,    Adjusted R-squared:  0.09219 
+## F-statistic:  2234 on 3 and 65957 DF,  p-value: &lt; 2.2e-16</code></pre>
+<pre class="r"><code>coeftest(lin_model, vcov = vcovHC(lin_model))</code></pre>
+<pre><code>## 
+## t test of coefficients:
+## 
+##                    Estimate Std. Error t value  Pr(&gt;|t|)    
+## (Intercept)      10.0277628  0.2194819  45.688 &lt; 2.2e-16 ***
+## AvgTemp          -1.3530203  0.0378418 -35.755 &lt; 2.2e-16 ***
+## Sunshine         -0.6780000  0.0240915 -28.143 &lt; 2.2e-16 ***
+## AvgTemp:Sunshine  0.0973810  0.0038227  25.474 &lt; 2.2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<p><em>Recomputing the regression with robust standard errors did little in changing the significance of the coefficients. The reason I believe this is the case is simply the fact that our coefficients were already so incredibly significant BEFORE trying robust standard errors. Therefore, even though the robust standard errors did have a large impact on the models standard errors and t-values, these ultimately had little effect on the significance of the results.</em></p>
+<pre class="r"><code>samp_dist &lt;- replicate(200, {
+  boot_dat &lt;- sample_frac(weather, replace = T)
+  lin_fit &lt;- lm(Rainfall~AvgTemp*Sunshine, data = boot_dat)
+  coef(lin_fit)
+})
+
+samp_dist %&gt;% t %&gt;% as.data.frame -&gt; boot_ses
+boot_ses %&gt;% summarize_all(sd) </code></pre>
+<pre><code>##   (Intercept)    AvgTemp   Sunshine AvgTemp:Sunshine
+## 1   0.2103921 0.03562369 0.02417387      0.003747995</code></pre>
+<pre class="r"><code>boot_ses %&gt;% pivot_longer(1:4) %&gt;% group_by(name) %&gt;% summarise(lower=quantile(value,0.025), upper = quantile(value, 0.975))</code></pre>
+<pre><code>## # A tibble: 4 x 3
+##   name               lower  upper
+##   &lt;chr&gt;              &lt;dbl&gt;  &lt;dbl&gt;
+## 1 (Intercept)       9.63   10.5  
+## 2 AvgTemp          -1.43   -1.29 
+## 3 AvgTemp:Sunshine  0.0904  0.106
+## 4 Sunshine         -0.732  -0.636</code></pre>
+<p><em>Comparing the resultant bootstrapped standard errors to our robust standard errors from the previous code chunk, we see that they vary from one another by less than 5% each. With this similarity and the knowledge of the p-values for the robust standard errors test, we can assume that p-values for the the bootstrapped standard errors are similarly as significant as those for the other tests.</em></p>
+</div>
+<div id="logistic-regression-predicting-if-it-will-rain" class="section level2">
+<h2>Logistic Regression Predicting if it Will Rain</h2>
+<div id="regression-using-only-average-temperature-sunshine-and-evaporation" class="section level3">
+<h3>Regression Using Only Average temperature, Sunshine, and Evaporation</h3>
+<pre class="r"><code>log_fit &lt;- glm(Rain~AvgTemp+Sunshine+Evaporation, data=weather, family = &quot;binomial&quot;)
+coeftest(log_fit)</code></pre>
+<pre><code>## 
+## z test of coefficients:
+## 
+##               Estimate Std. Error  z value  Pr(&gt;|z|)    
+## (Intercept)  2.0186923  0.0323692  62.3647 &lt; 2.2e-16 ***
+## AvgTemp     -0.5247711  0.0073569 -71.3307 &lt; 2.2e-16 ***
+## Sunshine    -0.0320934  0.0034013  -9.4356 &lt; 2.2e-16 ***
+## Evaporation -0.1380576  0.0039818 -34.6726 &lt; 2.2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code>coef(log_fit) %&gt;% exp %&gt;% as.data.frame -&gt; odds
+names(odds)[1] = &quot;odds&quot;  
+odds %&gt;% mutate(prob = (odds/(1+odds)), log_odds = coef(log_fit))</code></pre>
+<pre><code>##                  odds      prob    log_odds
+## (Intercept) 7.5284736 0.8827457  2.01869231
+## AvgTemp     0.5916908 0.3717373 -0.52477115
+## Sunshine    0.9684161 0.4919773 -0.03209341
+## Evaporation 0.8710485 0.4655403 -0.13805757</code></pre>
+<p><em>Our logistic regression model predicts whether or not it will rain on a given day in Australia based on average temperature of the day, the amount of sunshine received that day, and the amount of evaporation that took place that day. The coefficients of this model are printed above. The intercept of 7.528 (log-odds) and 0.883 (probability) represent a 88.3% chance that a day receives rain given that the average temperature, amount of sunshine received, and amount of evaporation is all 0. The coefficient for AvgTemp represents a change in the probability of rain occurring by a factor of 0.371 for each increase of 1 degree celsius. The coefficient for sunshine represents a change in the probability of rain occurring by a factor of 0.492 for each hr increase of sunshine. Finally, the coefficient for evaportation represents a change in the probability of rain occurring by a factor of 0.465 for each unit increase in evaporation.</em></p>
+<pre class="r"><code>probs &lt;- predict(log_fit, type=&quot;response&quot;)
+table(predict=as.numeric(probs&gt;.25), truth= weather$Rain) %&gt;% addmargins</code></pre>
+<pre><code>##        truth
+## predict     0     1   Sum
+##     0   37692  3783 41475
+##     1   13667 10819 24486
+##     Sum 51359 14602 65961</code></pre>
+<p><em>While normally for our prediction models we use a cutoff of prob = 0.5, after observing the graphical outputs printed below I found that a cutoff of prob = 0.25 is far more appropriate for this model. That being said, a confusion matrix of our model is printed above. From simple observations of the confusion matrix we can see that our model is doing reasonably well at classifying between rainy days and non-rainy days. The biggest issue appears to be the precision of our model.</em></p>
+<pre class="r"><code>class_diag(probs, truth = weather$Rain, cutoff = 0.25)</code></pre>
+<pre><code>##         acc      sens      spec       ppv       auc
+## 1 0.7354497 0.7409259 0.7338928 0.4418443 0.8087799</code></pre>
+<p><em>The diagnostics printed above confirm our thoughts about the confusion matrix. While the accuracy, sensitivity, specificity, and AUC of our model are all relatively acceptable, the precision of 0.442 is seriously lacking.</em></p>
+<pre class="r"><code>ggplot(weather, aes(predict(log_fit, type=&quot;link&quot;), color=RainToday, fill=RainToday)) + geom_density(alpha=0.4) + theme(legend.position=c(.85,.85))+ geom_vline(xintercept=-1.1)+xlab(&quot;predictor (logit)&quot;) + xlim(c(-7,3))</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
+<pre class="r"><code>ggplot(weather, aes(AvgTemp,probs))+geom_point(aes(color=RainToday),alpha=.5,size=3)+
+geom_rug(aes(color=RainToday),alpha=.5,sides=&quot;right&quot;)+geom_hline(yintercept=.25)</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-14-2.png" width="672" /></p>
+<pre class="r"><code>library(plotROC)
+ggplot(weather) + geom_roc(aes(d=Rain, m= probs), n.cuts=0) -&gt; ROC_plot
+ROC_plot</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-14-3.png" width="672" /></p>
+<p><em>The plots above tell us several very important things about our model. First and foremost, the logit and scatter plots both corroborated to me the need to change the prediction cutoff to get more accurate results. This new cutoff is denoted by a vertical line on the logit plot and a horizontal line on the scatter plot and is equivalent to probability = 0.25. Another thing to note is that there exists quite a bit of density overlap in our logit plot. What this tells me is that, regardless of the cutoff point, with the information provided to this model we are simply unable to achieve a preferable level of statistical distinction between rainy and non-rainy days. This could indicate that our model, overall, is not a great fit. The last important bit of information I gathered was from the ROC plot which confirmed that our fit is not that great, some might even call it ‘fair’. Side note: I’ve never seen an ROC plot this smooth before and its kind of weirding me out. As you can see I used the built in ggplot ROC functionality and I’m fairly certain I’m using it correctly. If not though please do let me know because this is a point of confusion for me. </em></p>
+</div>
+<div id="regression-using-all-variables" class="section level3">
+<h3>Regression Using All Variables</h3>
+<pre class="r"><code># fit using all viable variables
+
+weather_filtered &lt;- weather %&gt;% select(-c(Date,RainToday, RainTomorrow, Rainfall)) #remove all variables directly related to whether or not it rained or, in the case of date, completely ruin the model and turn my computer into a black hole
+
+head(weather_filtered)</code></pre>
+<pre><code>##      Location MinTemp MaxTemp Evaporation Sunshine WindGustDir WindGustSpeed
+## 6050    Cobar    17.9    35.2        12.0     12.3         SSW            48
+## 6051    Cobar    18.4    28.9        14.8     13.0           S            37
+## 6052    Cobar    15.5    34.1        12.6     13.3          SE            30
+## 6053    Cobar    19.4    37.6        10.8     10.6         NNE            46
+## 6054    Cobar    21.9    38.4        11.4     12.2         WNW            31
+## 6055    Cobar    24.2    41.0        11.2      8.4         WNW            35
+##      Rain AvgTemp
+## 6050    0    8.65
+## 6051    0    5.25
+## 6052    0    9.30
+## 6053    0    9.10
+## 6054    0    8.25
+## 6055    0    8.40</code></pre>
+<pre class="r"><code>fit &lt;- glm(Rain~(.), data = weather_filtered, family = &quot;binomial&quot;)
+summary(fit)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = Rain ~ (.), family = &quot;binomial&quot;, data = weather_filtered)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -2.5640  -0.6353  -0.3463  -0.0933   5.7847  
+## 
+## Coefficients: (1 not defined because of singularities)
+##                            Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)               0.0022752  0.1153741   0.020 0.984267    
+## LocationAliceSprings      0.5234529  0.1254144   4.174 3.00e-05 ***
+## LocationBrisbane          0.5650911  0.0994211   5.684 1.32e-08 ***
+## LocationCairns            0.3616292  0.1021288   3.541 0.000399 ***
+## LocationCanberra          0.5548514  0.1190317   4.661 3.14e-06 ***
+## LocationCobar            -0.0054462  0.1714445  -0.032 0.974658    
+## LocationCoffsHarbour      0.1966623  0.1076693   1.827 0.067769 .  
+## LocationDartmoor          0.4263103  0.0995227   4.284 1.84e-05 ***
+## LocationDarwin            0.2258264  0.1025622   2.202 0.027676 *  
+## LocationHobart           -0.5259767  0.0981745  -5.358 8.44e-08 ***
+## LocationMelbourne        -0.1915187  0.1011810  -1.893 0.058380 .  
+## LocationMelbourneAirport -0.1803959  0.0996239  -1.811 0.070177 .  
+## LocationMildura           0.0434390  0.1097724   0.396 0.692313    
+## LocationMoree             0.7053542  0.1152897   6.118 9.47e-10 ***
+## LocationMountGambier      0.2014578  0.0994847   2.025 0.042866 *  
+## LocationNorfolkIsland    -0.8358885  0.0983064  -8.503  &lt; 2e-16 ***
+## LocationNuriootpa         0.0606321  0.1032141   0.587 0.556908    
+## LocationPerth             0.4602971  0.0995283   4.625 3.75e-06 ***
+## LocationPerthAirport      0.3595990  0.1018355   3.531 0.000414 ***
+## LocationPortland          0.0522270  0.0980527   0.533 0.594282    
+## LocationSale              0.0001266  0.1090245   0.001 0.999073    
+## LocationSydney           -0.1421615  0.1003543  -1.417 0.156601    
+## LocationSydneyAirport    -0.3306324  0.0982115  -3.367 0.000761 ***
+## LocationTownsville       -0.1321021  0.1077327  -1.226 0.220123    
+## LocationWaggaWagga        0.4290016  0.1065008   4.028 5.62e-05 ***
+## LocationWatsonia          0.1684172  0.0984858   1.710 0.087254 .  
+## LocationWilliamtown       0.5848087  0.1130231   5.174 2.29e-07 ***
+## LocationWoomera          -0.3135503  0.1303689  -2.405 0.016168 *  
+## MinTemp                   0.2906173  0.0047101  61.700  &lt; 2e-16 ***
+## MaxTemp                  -0.2435757  0.0046599 -52.271  &lt; 2e-16 ***
+## Evaporation              -0.2278749  0.0055674 -40.930  &lt; 2e-16 ***
+## Sunshine                 -0.0355287  0.0037701  -9.424  &lt; 2e-16 ***
+## WindGustDirENE            0.0220460  0.0666171   0.331 0.740693    
+## WindGustDirESE            0.0968618  0.0664741   1.457 0.145079    
+## WindGustDirN             -0.3222820  0.0673307  -4.787 1.70e-06 ***
+## WindGustDirNE            -0.1454116  0.0723514  -2.010 0.044453 *  
+## WindGustDirNNE           -0.3380426  0.0771980  -4.379 1.19e-05 ***
+## WindGustDirNNW            0.0823789  0.0728398   1.131 0.258072    
+## WindGustDirNW             0.3034354  0.0680909   4.456 8.34e-06 ***
+## WindGustDirS              0.4349951  0.0630164   6.903 5.10e-12 ***
+## WindGustDirSE             0.1818540  0.0631963   2.878 0.004007 ** 
+## WindGustDirSSE            0.2822932  0.0649723   4.345 1.39e-05 ***
+## WindGustDirSSW            0.5428415  0.0618054   8.783  &lt; 2e-16 ***
+## WindGustDirSW             0.6905305  0.0609036  11.338  &lt; 2e-16 ***
+## WindGustDirW              0.5615938  0.0598625   9.381  &lt; 2e-16 ***
+## WindGustDirWNW            0.3608539  0.0641549   5.625 1.86e-08 ***
+## WindGustDirWSW            0.6829416  0.0612172  11.156  &lt; 2e-16 ***
+## WindGustSpeed             0.0314361  0.0008977  35.019  &lt; 2e-16 ***
+## AvgTemp                          NA         NA      NA       NA    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 69739  on 65960  degrees of freedom
+## Residual deviance: 51971  on 65913  degrees of freedom
+## AIC: 52067
+## 
+## Number of Fisher Scoring iterations: 6</code></pre>
+<p><em>The model above has too many coefficients to interpret individually so I will do my best to summarize the coefficient results. The first major change I see in this model from the last is the wildly decreased intercept coefficient. The reference variable of this model is the location of Adelaide and judging by this coefficient, Adelaide is a pretty dry place. From there on we see individual coefficients associated with location and wind gust direction (our two categorical variables). These additional coefficients make our model more robust by producing a different prediction function for each major city in Australia and each cardinal wind direction. </em></p>
+<pre class="r"><code>probs &lt;- predict(fit, type=&quot;response&quot;)
+truth &lt;- weather$Rain
+table(predict=as.numeric(probs&gt;.25), truth= weather_filtered$Rain) %&gt;% addmargins</code></pre>
+<pre><code>##        truth
+## predict     0     1   Sum
+##     0   39449  3659 43108
+##     1   11910 10943 22853
+##     Sum 51359 14602 65961</code></pre>
+<pre class="r"><code>library(plotROC)
+ggplot(weather) + geom_roc(aes(d=Rain, m= probs), n.cuts=0) -&gt; ROC_plot
+ROC_plot</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<pre class="r"><code>class_diag(probs, truth, cutoff = 0.25)</code></pre>
+<pre><code>##         acc      sens     spec      ppv       auc
+## 1 0.7639666 0.7494179 0.768103 0.478843 0.8369422</code></pre>
+<p><em>All of our diagnostic variables, including AUC, increased relative to our previous model that only predicted with Average temperature, sunshine, and evaporation. AUC increased by approximately 0.03.</em></p>
+</div>
+<div id="fold-cross-validation-of-regression-using-all-viable-predictors" class="section level3">
+<h3>10-Fold Cross validation of Regression Using All Viable Predictors</h3>
+<pre class="r"><code>set.seed(42069) #I&#39;m an adult, I promise
+k = 10
+
+data1 &lt;- weather %&gt;% select(-c(Date,RainToday, RainTomorrow, Rainfall)) %&gt;% .[sample(nrow(.)), ]
+folds = cut(seq(1:nrow(data1)), breaks=k, labels=F)
+diags &lt;- NULL
+
+for (i in 1:k){
+  train &lt;- data1[folds != i,]
+  test &lt;- data1[folds == i,]
+  truth &lt;- test$Rain
+  
+  fit &lt;- glm(Rain~(.), data=train, family=&quot;binomial&quot;)
+  probs &lt;- predict(fit, newdata = test, type=&quot;response&quot;)
+  
+  diags &lt;- rbind(diags, class_diag(probs, truth, cutoff = 0.25))
+}
+
+diags %&gt;% summarise_all(mean, na.rm=T)</code></pre>
+<pre><code>##         acc      sens      spec       ppv       auc
+## 1 0.7634513 0.7487271 0.7676733 0.4782559 0.8362817</code></pre>
+<p><em>Compared to our in-sample metrics from before, the out-of-sample metrics of our model are actually fairly good. Though all of our diagnostic variables decreased in value, the decreases were so minute that I would go as far as to say they are almost completely insignificant. This is a good thing because although our model is only a ‘good’ one, it performs just as well out of sample as it does in sample; therefore, it is applicable for new predictions in its current state.</em></p>
+</div>
+<div id="lasso-on-regression-of-all-viable-predictors" class="section level3">
+<h3>LASSO on Regression of All Viable Predictors</h3>
+<pre class="r"><code>library(glmnet)</code></pre>
+<pre><code>## Loading required package: Matrix</code></pre>
+<pre><code>## 
+## Attaching package: &#39;Matrix&#39;</code></pre>
+<pre><code>## The following objects are masked from &#39;package:tidyr&#39;:
+## 
+##     expand, pack, unpack</code></pre>
+<pre><code>## Loaded glmnet 4.1-1</code></pre>
+<pre class="r"><code>y = as.matrix(weather_filtered$Rain)
+x &lt;- model.matrix(Rain~(.), data=weather_filtered)[,-1]
+
+cv &lt;- cv.glmnet(x,y)
+{plot(cv$glmnet.fit, &quot;lambda&quot;, label=TRUE); abline(v = log(cv$lambda.1se)); abline(v = log(cv$lambda.min),lty=2)}</code></pre>
+<p><img src="/project/project2_files/figure-html/unnamed-chunk-18-1.png" width="672" /></p>
+<pre class="r"><code>cv&lt;-cv.glmnet(x,y,family=&quot;binomial&quot;)
+lasso&lt;-glmnet(x,y,family=&quot;binomial&quot;,lambda=cv$lambda.1se)
+coef(lasso)</code></pre>
+<pre><code>## 49 x 1 sparse Matrix of class &quot;dgCMatrix&quot;
+##                                   s0
+## (Intercept)               0.45677182
+## LocationAliceSprings      .         
+## LocationBrisbane          0.21995694
+## LocationCairns            0.12472174
+## LocationCanberra          0.12750313
+## LocationCobar             .         
+## LocationCoffsHarbour      .         
+## LocationDartmoor          0.18025829
+## LocationDarwin            .         
+## LocationHobart           -0.54422819
+## LocationMelbourne        -0.20200165
+## LocationMelbourneAirport -0.20457071
+## LocationMildura           .         
+## LocationMoree             0.25350135
+## LocationMountGambier      .         
+## LocationNorfolkIsland    -0.86193555
+## LocationNuriootpa         .         
+## LocationPerth             0.18287168
+## LocationPerthAirport      0.05252455
+## LocationPortland          .         
+## LocationSale             -0.01369987
+## LocationSydney           -0.18425365
+## LocationSydneyAirport    -0.34324682
+## LocationTownsville       -0.24820151
+## LocationWaggaWagga        0.06546571
+## LocationWatsonia          .         
+## LocationWilliamtown       0.27914126
+## LocationWoomera          -0.21642657
+## MinTemp                   0.03596702
+## MaxTemp                   .         
+## Evaporation              -0.19855429
+## Sunshine                 -0.03515830
+## WindGustDirENE           -0.06412511
+## WindGustDirESE            .         
+## WindGustDirN             -0.46198618
+## WindGustDirNE            -0.21699773
+## WindGustDirNNE           -0.39038080
+## WindGustDirNNW           -0.03257643
+## WindGustDirNW             .         
+## WindGustDirS              0.10693159
+## WindGustDirSE             .         
+## WindGustDirSSE            .         
+## WindGustDirSSW            0.22177211
+## WindGustDirSW             0.38203818
+## WindGustDirW              0.25696203
+## WindGustDirWNW            0.08783907
+## WindGustDirWSW            0.36950641
+## WindGustSpeed             0.02787666
+## AvgTemp                  -0.46499692</code></pre>
+<p><em>The variables retained after the LASSO test are numerous so it will be more beneficial to recognize the variables that did not produce a significant response. Of all of our variables, the locations of Mildura, Alice Springs, Cobar, Coffs Harbor, Darwin, Nurioopta, Mount Gambier, Portland, Watsonia, the wind gust directions of ESE, NW, SE, and SSE and the numeric variable max temp were insignificant. These variables will be removed from our next model.</em></p>
+<pre class="r"><code>#format significant lasso variables as binary encodings
+
+weather_filtered$brisbane &lt;- ifelse(weather_filtered$Location == &quot;Brisbane&quot;,1,0)
+weather_filtered$cairns &lt;- ifelse(weather_filtered$Location == &#39;Cairns&#39;,1,0)
+weather_filtered$canberra &lt;- ifelse(weather_filtered$Location == &#39;Canberra&#39;,1,0)
+weather_filtered$dartmoor &lt;- ifelse(weather_filtered$Location == &#39;Dartmoor&#39;,1,0)
+weather_filtered$hobart &lt;- ifelse(weather_filtered$Location == &#39;Hobart&#39;,1,0)
+weather_filtered$melbourne &lt;- ifelse(weather_filtered$Location == &#39;Melbourne&#39;,1,0)
+weather_filtered$melbourneairport &lt;- ifelse(weather_filtered$Location == &#39;MelbourneAirport&#39;,1,0)
+weather_filtered$moree &lt;- ifelse(weather_filtered$Location == &#39;Moree&#39;,1,0)
+weather_filtered$norfolkisland &lt;- ifelse(weather_filtered$Location == &#39;NorfolkIsland&#39;,1,0)
+weather_filtered$perth &lt;- ifelse(weather_filtered$Location == &#39;Perth&#39;,1,0)
+weather_filtered$perthairport &lt;- ifelse(weather_filtered$Location == &#39;PerthAirport&#39;,1,0)
+weather_filtered$sale &lt;- ifelse(weather_filtered$Location == &#39;Sale&#39;,1,0)
+weather_filtered$sydney &lt;- ifelse(weather_filtered$Location == &#39;Sydney&#39;,1,0)
+weather_filtered$sydneyairport &lt;- ifelse(weather_filtered$Location == &#39;SydneyAirport&#39;,1,0)
+weather_filtered$townsville &lt;- ifelse(weather_filtered$Location == &#39;Townsville&#39;,1,0)
+weather_filtered$waggawagga &lt;- ifelse(weather_filtered$Location == &#39;WaggaWagga&#39;,1,0)
+weather_filtered$williamtown &lt;- ifelse(weather_filtered$Location == &#39;Williamtown&#39;,1,0)
+weather_filtered$woomera &lt;- ifelse(weather_filtered$Location == &#39;Woomera&#39;,1,0)
+
+weather_filtered$ENE &lt;- ifelse(weather_filtered$WindGustDir == &#39;ENE&#39;,1,0)
+weather_filtered$N &lt;- ifelse(weather_filtered$WindGustDir == &#39;N&#39;,1,0)
+weather_filtered$NE &lt;- ifelse(weather_filtered$WindGustDir == &#39;NE&#39;,1,0)
+weather_filtered$NNE &lt;- ifelse(weather_filtered$WindGustDir == &#39;NNE&#39;,1,0)
+weather_filtered$NNW &lt;- ifelse(weather_filtered$WindGustDir == &#39;NNW&#39;,1,0)
+weather_filtered$S &lt;- ifelse(weather_filtered$WindGustDir == &#39;S&#39;,1,0)
+weather_filtered$SSW &lt;- ifelse(weather_filtered$WindGustDir == &#39;SSW&#39;,1,0)
+weather_filtered$SW &lt;- ifelse(weather_filtered$WindGustDir == &#39;SW&#39;,1,0)
+weather_filtered$W &lt;- ifelse(weather_filtered$WindGustDir == &#39;W&#39;,1,0)
+weather_filtered$WNW &lt;- ifelse(weather_filtered$WindGustDir == &#39;WNW&#39;,1,0)
+weather_filtered$WSW &lt;- ifelse(weather_filtered$WindGustDir == &#39;WSW&#39;,1,0)
+
+fit &lt;- glm(Rain~woomera+williamtown+waggawagga+townsville+sydneyairport+sydney+sale+perthairport+perth+norfolkisland+moree+melbourne+melbourneairport+dartmoor+canberra+brisbane+AvgTemp+MinTemp+Evaporation+Sunshine+WindGustSpeed+ENE+N+NE+NNE+NNW+S+SSW+SW+W+WNW+WSW, data = weather_filtered, family = &quot;binomial&quot;)
+
+probs &lt;- predict(fit, type=&quot;response&quot;)
+pred &lt;- ifelse(probs&gt;0.25,1,0)
+truth &lt;- weather_filtered$Rain
+
+table(truth = truth, prediction = pred) %&gt;% addmargins</code></pre>
+<pre><code>##      prediction
+## truth     0     1   Sum
+##   0   39318 12041 51359
+##   1    3673 10929 14602
+##   Sum 42991 22970 65961</code></pre>
+<pre class="r"><code>class_diag(probs, truth, 0.25)</code></pre>
+<pre><code>##         acc      sens      spec       ppv       auc
+## 1 0.7617683 0.7484591 0.7655523 0.4757945 0.8355514</code></pre>
+<p><em>Diagnostic variables of the model with only significant LASSO’d variables included are all ever so slightly worse than those for the model with all variables included.</em></p>
+</div>
+<div id="fold-cross-validation-of-regression-using-lasso-selected-predictors" class="section level3">
+<h3>10-Fold Cross Validation of Regression Using LASSO Selected Predictors</h3>
+<pre class="r"><code># 10-fold cross validation on LASSO&#39;d logistic regression
+
+set.seed(8008135) #I&#39;m an adult, I promise
+k = 10
+
+data1 &lt;- weather_filtered %&gt;% .[sample(nrow(.)), ]
+folds = cut(seq(1:nrow(data1)), breaks=k, labels=F)
+diags &lt;- NULL
+
+for (i in 1:k){
+  train &lt;- data1[folds != i,]
+  test &lt;- data1[folds == i,]
+  truth &lt;- test$Rain
+  
+  fit &lt;- glm(Rain~woomera+williamtown+waggawagga+townsville+sydneyairport+sydney+sale+perthairport+perth+norfolkisland+moree+melbourne+melbourneairport+dartmoor+canberra+brisbane+AvgTemp+MinTemp+Evaporation+Sunshine+WindGustSpeed+ENE+N+NE+NNE+NNW+S+SSW+SW+W+WNW+WSW, data = train, family = &quot;binomial&quot;)
+  probs &lt;- predict(fit, newdata = test, type=&quot;response&quot;)
+  
+  diags &lt;- rbind(diags, class_diag(probs, truth, cutoff = 0.25))
+}
+
+diags %&gt;% summarise_all(mean, na.rm=T)</code></pre>
+<pre><code>##         acc     sens      spec       ppv       auc
+## 1 0.7613438 0.746319 0.7656287 0.4752123 0.8349293</code></pre>
+<p><em>Performing 10-fold cross validation of this model once again produces diagnostic variables that differ very little from the in-sample diagnostic tests. Oddly enough, the out-of-sample diagnostics, specifically AUC, decreased after performing our LASSO tests and removing insignificant variables. This decrease in AUC is so minute though that its trade-off with decreased model complexity may be seen as acceptable.</em></p>
+</div>
+</div>
+</div>
+
+            
+        <hr>         <div class="related-posts">
+                <h5>Related Posts</h5>
+                
+              </div> 
+            </div>
+          </div>
+
+   <hr>  <div class="disqus">
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+
+    (function() {
+      
+      
+      if (window.location.hostname == "localhost")
+        return;
+
+      var disqus_shortname = '';
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com/" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div> 
+        </div>
+      </div>
+    </div>
+
+    
+    <footer>
+  <div id="footer">
+    <div class="container">
+      <p class="text-muted">&copy; All rights reserved. Powered by <a href="https://gohugo.io/">Hugo</a> and
+      <a href="http://www.github.com/nurlansu/hugo-sustain/">sustain</a> with ♥</p>
+    </div>
+  </div>
+</footer>
+<div class="footer"></div>
+
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+<script src="/js/docs.min.js"></script>
+<script src="/js/main.js"></script>
+
+<script src="/js/ie10-viewport-bug-workaround.js"></script>
+
+
+    
+  </body>
+</html>

@@ -1,0 +1,347 @@
+---
+title: "Project 2: Don't Need No Weatherman To Know When It Will Rain In Australia"
+author: "Gareth Meredith"
+date: "4/26/2021"
+pubdate: "4/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Don't Need No Weatherman To Know When It Will Rain In Australia
+
+## Introducing our Data
+
+```{r, warning=F, message=F}
+library(dplyr)
+
+weather <- read.csv("weatherAUS.csv")
+weather <- weather[,c(1,2,3,4,5,6,7,8,9,22,23)]
+weather <- weather[complete.cases(weather), ] %>% mutate(Rain = ifelse(RainToday == "Yes", 1, 0))
+weather <- weather %>% mutate(AvgTemp = (MaxTemp-MinTemp)/2)
+
+class_diag<-function(probs,truth, cutoff){
+  
+  tab<-table(factor(probs>cutoff,levels=c("FALSE","TRUE")),truth)
+  acc=sum(diag(tab))/sum(tab)
+  sens=tab[2,2]/colSums(tab)[2]
+  spec=tab[1,1]/colSums(tab)[1]
+  ppv=tab[2,2]/rowSums(tab)[2]
+
+  if(is.numeric(truth)==FALSE & is.logical(truth)==FALSE) truth<-as.numeric(truth)-1
+  
+  #CALCULATE EXACT AUC
+  ord<-order(probs, decreasing=TRUE)
+  probs <- probs[ord]; truth <- truth[ord]
+  
+  TPR=cumsum(truth)/max(1,sum(truth)) 
+  FPR=cumsum(!truth)/max(1,sum(!truth))
+  
+  dup<-c(probs[-1]>=probs[-length(probs)], FALSE)
+  TPR<-c(0,TPR[!dup],1); FPR<-c(0,FPR[!dup],1)
+  
+  n <- length(TPR)
+  auc<- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )
+
+  data.frame(acc,sens,spec,ppv,auc)
+}
+```
+
+*The dataset I chose for this project was a dataset entitled 'Rain in Australia'. This dataset contains daily information about weather parameters such as min and max temperature, amount of sunshine received, amount of evaporation experienced, and wind speed and direction for all of Australia's 28 major cities from the span November 2007 to June 2017. After removing rows containing NA's, the dataset has 65961 total observations which averages to about 2356 observations per major city. My hopes with this dataset is to create a prediction model that will be able to accurately predict whether or not it will rain on a given day in Australia based solely on location and simple weather parameters.*
+
+## MANOVA and ANOVA Testing
+
+```{r, message=F, warning=F}
+library(rstatix)
+library(dplyr)
+library(tidyverse)
+
+group <- weather$Location
+DVs <- weather %>% select_if(is.numeric)
+
+#lapply(split(DVs,group), cov)
+man1 <- manova(cbind(MinTemp, MaxTemp, Sunshine, WindGustSpeed, Evaporation)~RainToday, data=weather)
+summary(man1)
+```
+*Results of MANOVA test are significant, therefore, we will test unvariate ANOVAs next.*
+
+```{r}
+summary.aov(man1)
+```
+*All DVs are significant, therefore we conclude that the weather does differ on days when it rains compared to days when it doesn't ... duhhhh lol.*
+
+```{r}
+weather %>% group_by(RainToday) %>% summarise(mean(MinTemp), mean(MaxTemp), mean(Sunshine), mean(WindGustSpeed), mean(Evaporation))
+
+pairwise.t.test(weather$MinTemp,weather$RainToday,  p.adj = "none") 
+pairwise.t.test(weather$MaxTemp,weather$RainToday,  p.adj = "none")
+pairwise.t.test(weather$Sunshine,weather$RainToday,  p.adj = "none")
+pairwise.t.test(weather$WindGustSpeed,weather$RainToday,  p.adj = "none")
+pairwise.t.test(weather$Evaporation,weather$RainToday,  p.adj = "none")
+```
+*We performed 1 MANOVA test, 5 ANOVA tests, and 5 pairwise t-tests for a total of 11 tests. Therefore, our significance level we must use will be alpha = 0.05/11 = 4.54e-3. Despite using this decreased significance level, all test statistics still remain significant*
+
+```{r}
+library(ggplot2)
+weather %>% ggplot(aes(MinTemp, MaxTemp)) + geom_point(alpha=0.5) + geom_density_2d(h=2) + coord_fixed() + facet_wrap(~RainToday)
+
+weather %>% ggplot(aes(Sunshine, Evaporation, color = WindGustSpeed)) + geom_point(alpha=0.5) + geom_density_2d(h=2) + facet_wrap(~RainToday) + scale_color_viridis_c(option="magma")
+```
+*From the plots above we can see that our MANOVA normality assumption is not really met since the variables do not appear to follow a normal distribution about a mean point. Furthermore, the plots show have some extreme outliers, specifically in the evaporation vs sunshine plot, which again is in direct opposition to our MANOVA assumptions. Finally, though a linear relationship does exist between min and max temp, it does not exist for all of the DV's which once again goes against our MANOVA assumptions.*
+
+## Randomized Test
+
+*Difference of mean daily temperature on days when it rains vs days when it does not rain.*
+
+```{r}
+weather_samp <- weather[sample(nrow(weather),5000),]
+
+weather_samp %>% ggplot(aes(RainToday, AvgTemp, fill = factor(RainToday))) + geom_boxplot() + stat_summary(fun = mean, color="black", geom = "point", size=4, show.legend = F) + scale_fill_discrete(name = "Did it Rain?") + xlab(NULL) + ggtitle("Distribution of Average Daily Temperature")
+```
+*We can see from the plot above that there appears to be a difference in the average temperature on days when it rains vs. days when it does not. This difference exists in both the mean and variances of average daily temperatures between rainy and non-rainy days.*
+
+```{r, warning=F, message=F}
+ttest <- t.test(AvgTemp ~ RainToday, data=weather_samp)
+wtest <- wilcox.test(AvgTemp ~ RainToday, data=weather_samp)
+
+ttest
+wtest
+
+```
+*Both our difference in means t-test and our nonparametric wilcox tests tell us to reject the null hypothesis. Therefore we must conclude that mean Average Temperature for days when it rains is different than the average temperature on days when it does not. Our test statistics are a gargantuan t = 37.821 and W = 3339461 and our p-values are both <2.2e-16.*
+
+## Linear Model Predicting Rainfall Amount from Average Daily Temperature and Sunshine Recieved
+
+```{r, warning=F}
+library(interactions)
+
+lin_model <- lm(Rainfall~AvgTemp*Sunshine, data=weather)
+summary(lin_model)
+
+interact_plot(model = lin_model, pred = AvgTemp, modx = Sunshine, interval = TRUE, int.type = "confidence", int.width = .8) + labs(title = "Interaction Plot of our Linear Model") + scale_y_continuous(breaks= seq(-10,10,2)) + scale_x_continuous(breaks = seq(0,20,2))
+
+weather %>% ggplot(aes(Sunshine, Rainfall, color=AvgTemp)) + geom_point()
+weather %>% ggplot(aes(AvgTemp, Rainfall, color = Sunshine)) + geom_point()
+
+resids <- lin_model$residuals
+ggplot()+geom_histogram(aes(resids),bins = 50)+ xlim(c(-25,50))
+ks.test(resids, "pnorm", mean=0, sd(resids))
+```
+
+*The coefficients of our model determine how our model interacts with input data. For a day with an average temperature of 0c and 0 hrs of sunshine, the predicted amount of rainfall will be 10.03cm (intercept). For every subsequent increase of 1c in average temperature, the predicted rainfall decreases by 1.353cm. For every 1 hr increase in sunshine, the predicted amount of rainfall decreases by 0.67cm. From observing the interaction plot above, and the coefficient for avgtemp:sunshine, we can see that the effect of the average temperature on the predicted rainfall decreases as sunshine increases. *
+
+*The proportion of variance in outcome that this model explains is 0.09219, which is the coefficient of determination (r^2).*
+
+*Based off of the plots above, neither homoskedasticity, linearity, nor normality have been met. Therefore, we will recompute the regression results with robust standard errors.*
+
+```{r, warning=FALSE, message=F}
+library(sandwich)
+library(lmtest)
+
+bptest(lin_model)
+
+summary(lin_model)
+coeftest(lin_model, vcov = vcovHC(lin_model))
+```
+*Recomputing the regression with robust standard errors did little in changing the significance of the coefficients. The reason I believe this is the case is simply the fact that our coefficients were already so incredibly significant BEFORE trying robust standard errors. Therefore, even though the robust standard errors did have a large impact on the models standard errors and t-values, these ultimately had little effect on the significance of the results.*
+
+```{r, cache=TRUE}
+samp_dist <- replicate(200, {
+  boot_dat <- sample_frac(weather, replace = T)
+  lin_fit <- lm(Rainfall~AvgTemp*Sunshine, data = boot_dat)
+  coef(lin_fit)
+})
+
+samp_dist %>% t %>% as.data.frame -> boot_ses
+boot_ses %>% summarize_all(sd) 
+
+boot_ses %>% pivot_longer(1:4) %>% group_by(name) %>% summarise(lower=quantile(value,0.025), upper = quantile(value, 0.975))
+```
+*Comparing the resultant bootstrapped standard errors to our robust standard errors from the previous code chunk, we see that they vary from one another by less than 5% each. With this similarity and the knowledge of the p-values for the robust standard errors test, we can assume that p-values for the the bootstrapped standard errors are similarly as significant as those for the other tests.*
+
+## Logistic Regression Predicting if it Will Rain
+
+### Regression Using Only Average temperature, Sunshine, and Evaporation
+
+```{r}
+log_fit <- glm(Rain~AvgTemp+Sunshine+Evaporation, data=weather, family = "binomial")
+coeftest(log_fit)
+
+coef(log_fit) %>% exp %>% as.data.frame -> odds
+names(odds)[1] = "odds"  
+odds %>% mutate(prob = (odds/(1+odds)), log_odds = coef(log_fit))
+```
+*Our logistic regression model predicts whether or not it will rain on a given day in Australia based on average temperature of the day, the amount of sunshine received that day, and the amount of evaporation that took place that day. The coefficients of this model are printed above. The intercept of 7.528 (log-odds) and 0.883 (probability) represent a 88.3% chance that a day receives rain given that the average temperature, amount of sunshine received, and amount of evaporation is all 0. The coefficient for AvgTemp represents a change in the probability of rain occurring by a factor of 0.371 for each increase of 1 degree celsius. The coefficient for sunshine represents a change in the probability of rain occurring by a factor of 0.492 for each hr increase of sunshine. Finally, the coefficient for evaportation represents a change in the probability of rain occurring by a factor of 0.465 for each unit increase in evaporation.*
+
+
+```{r, cache=TRUE, warning=F}
+probs <- predict(log_fit, type="response")
+table(predict=as.numeric(probs>.25), truth= weather$Rain) %>% addmargins
+```
+*While normally for our prediction models we use a cutoff of prob = 0.5, after observing the graphical outputs printed below I found that a cutoff of prob = 0.25 is far more appropriate for this model. That being said, a confusion matrix of our model is printed above. From simple observations of the confusion matrix we can see that our model is doing reasonably well at classifying between rainy days and non-rainy days. The biggest issue appears to be the precision of our model.*
+
+```{r}
+class_diag(probs, truth = weather$Rain, cutoff = 0.25)
+```
+*The diagnostics printed above confirm our thoughts about the confusion matrix. While the accuracy, sensitivity, specificity, and AUC of our model are all relatively acceptable, the precision of 0.442 is seriously lacking.*
+
+```{r, cache=TRUE, warning=F}
+ggplot(weather, aes(predict(log_fit, type="link"), color=RainToday, fill=RainToday)) + geom_density(alpha=0.4) + theme(legend.position=c(.85,.85))+ geom_vline(xintercept=-1.1)+xlab("predictor (logit)") + xlim(c(-7,3))
+
+ggplot(weather, aes(AvgTemp,probs))+geom_point(aes(color=RainToday),alpha=.5,size=3)+
+geom_rug(aes(color=RainToday),alpha=.5,sides="right")+geom_hline(yintercept=.25)
+
+library(plotROC)
+ggplot(weather) + geom_roc(aes(d=Rain, m= probs), n.cuts=0) -> ROC_plot
+ROC_plot
+```
+
+*The plots above tell us several very important things about our model. First and foremost, the logit and scatter plots both corroborated to me the need to change the prediction cutoff to get more accurate results. This new cutoff is denoted by a vertical line on the logit plot and a horizontal line on the scatter plot and is equivalent to probability = 0.25. Another thing to note is that there exists quite a bit of density overlap in our logit plot. What this tells me is that, regardless of the cutoff point, with the information provided to this model we are simply unable to achieve a preferable level of statistical distinction between rainy and non-rainy days. This could indicate that our model, overall, is not a great fit. The last important bit of information I gathered was from the ROC plot which confirmed that our fit is not that great, some might even call it 'fair'. Side note: I've never seen an ROC plot this smooth before and its kind of weirding me out. As you can see I used the built in ggplot ROC functionality and I'm fairly certain I'm using it correctly. If not though please do let me know because this is a point of confusion for me. *
+
+### Regression Using All Variables
+
+```{r}
+# fit using all viable variables
+
+weather_filtered <- weather %>% select(-c(Date,RainToday, RainTomorrow, Rainfall)) #remove all variables directly related to whether or not it rained or, in the case of date, completely ruin the model and turn my computer into a black hole
+
+head(weather_filtered)
+fit <- glm(Rain~(.), data = weather_filtered, family = "binomial")
+summary(fit)
+```
+
+*The model above has too many coefficients to interpret individually so I will do my best to summarize the coefficient results. The first major change I see in this model from the last is the wildly decreased intercept coefficient. The reference variable of this model is the location of Adelaide and judging by this coefficient, Adelaide is a pretty dry place. From there on we see individual coefficients associated with location and wind gust direction (our two categorical variables). These additional coefficients make our model more robust by producing a different prediction function for each major city in Australia and each cardinal wind direction. *
+
+```{r, warning=F}
+probs <- predict(fit, type="response")
+truth <- weather$Rain
+table(predict=as.numeric(probs>.25), truth= weather_filtered$Rain) %>% addmargins
+
+library(plotROC)
+ggplot(weather) + geom_roc(aes(d=Rain, m= probs), n.cuts=0) -> ROC_plot
+ROC_plot
+
+class_diag(probs, truth, cutoff = 0.25)
+```
+*All of our diagnostic variables, including AUC, increased relative to our previous model that only predicted with Average temperature, sunshine, and evaporation. AUC increased by approximately 0.03.*
+
+### 10-Fold Cross validation of Regression Using All Viable Predictors
+
+```{r, warning=F}
+
+set.seed(42069) #I'm an adult, I promise
+k = 10
+
+data1 <- weather %>% select(-c(Date,RainToday, RainTomorrow, Rainfall)) %>% .[sample(nrow(.)), ]
+folds = cut(seq(1:nrow(data1)), breaks=k, labels=F)
+diags <- NULL
+
+for (i in 1:k){
+  train <- data1[folds != i,]
+  test <- data1[folds == i,]
+  truth <- test$Rain
+  
+  fit <- glm(Rain~(.), data=train, family="binomial")
+  probs <- predict(fit, newdata = test, type="response")
+  
+  diags <- rbind(diags, class_diag(probs, truth, cutoff = 0.25))
+}
+
+diags %>% summarise_all(mean, na.rm=T)
+```
+*Compared to our in-sample metrics from before, the out-of-sample metrics of our model are actually fairly good. Though all of our diagnostic variables decreased in value, the decreases were so minute that I would go as far as to say they are almost completely insignificant. This is a good thing because although our model is only a 'good' one, it performs just as well out of sample as it does in sample; therefore, it is applicable for new predictions in its current state.*
+
+### LASSO on Regression of All Viable Predictors
+
+```{r, warning=F}
+
+library(glmnet)
+
+y = as.matrix(weather_filtered$Rain)
+x <- model.matrix(Rain~(.), data=weather_filtered)[,-1]
+
+cv <- cv.glmnet(x,y)
+{plot(cv$glmnet.fit, "lambda", label=TRUE); abline(v = log(cv$lambda.1se)); abline(v = log(cv$lambda.min),lty=2)}
+
+cv<-cv.glmnet(x,y,family="binomial")
+lasso<-glmnet(x,y,family="binomial",lambda=cv$lambda.1se)
+coef(lasso)
+```
+*The variables retained after the LASSO test are numerous so it will be more beneficial to recognize the variables that did not produce a significant response. Of all of our variables, the locations of Mildura, Alice Springs, Cobar, Coffs Harbor, Darwin, Nurioopta, Mount Gambier, Portland, Watsonia, the wind gust directions of ESE, NW, SE, and SSE and the numeric variable max temp were insignificant. These variables will be removed from our next model.*
+
+```{r}
+#format significant lasso variables as binary encodings
+
+weather_filtered$brisbane <- ifelse(weather_filtered$Location == "Brisbane",1,0)
+weather_filtered$cairns <- ifelse(weather_filtered$Location == 'Cairns',1,0)
+weather_filtered$canberra <- ifelse(weather_filtered$Location == 'Canberra',1,0)
+weather_filtered$dartmoor <- ifelse(weather_filtered$Location == 'Dartmoor',1,0)
+weather_filtered$hobart <- ifelse(weather_filtered$Location == 'Hobart',1,0)
+weather_filtered$melbourne <- ifelse(weather_filtered$Location == 'Melbourne',1,0)
+weather_filtered$melbourneairport <- ifelse(weather_filtered$Location == 'MelbourneAirport',1,0)
+weather_filtered$moree <- ifelse(weather_filtered$Location == 'Moree',1,0)
+weather_filtered$norfolkisland <- ifelse(weather_filtered$Location == 'NorfolkIsland',1,0)
+weather_filtered$perth <- ifelse(weather_filtered$Location == 'Perth',1,0)
+weather_filtered$perthairport <- ifelse(weather_filtered$Location == 'PerthAirport',1,0)
+weather_filtered$sale <- ifelse(weather_filtered$Location == 'Sale',1,0)
+weather_filtered$sydney <- ifelse(weather_filtered$Location == 'Sydney',1,0)
+weather_filtered$sydneyairport <- ifelse(weather_filtered$Location == 'SydneyAirport',1,0)
+weather_filtered$townsville <- ifelse(weather_filtered$Location == 'Townsville',1,0)
+weather_filtered$waggawagga <- ifelse(weather_filtered$Location == 'WaggaWagga',1,0)
+weather_filtered$williamtown <- ifelse(weather_filtered$Location == 'Williamtown',1,0)
+weather_filtered$woomera <- ifelse(weather_filtered$Location == 'Woomera',1,0)
+
+weather_filtered$ENE <- ifelse(weather_filtered$WindGustDir == 'ENE',1,0)
+weather_filtered$N <- ifelse(weather_filtered$WindGustDir == 'N',1,0)
+weather_filtered$NE <- ifelse(weather_filtered$WindGustDir == 'NE',1,0)
+weather_filtered$NNE <- ifelse(weather_filtered$WindGustDir == 'NNE',1,0)
+weather_filtered$NNW <- ifelse(weather_filtered$WindGustDir == 'NNW',1,0)
+weather_filtered$S <- ifelse(weather_filtered$WindGustDir == 'S',1,0)
+weather_filtered$SSW <- ifelse(weather_filtered$WindGustDir == 'SSW',1,0)
+weather_filtered$SW <- ifelse(weather_filtered$WindGustDir == 'SW',1,0)
+weather_filtered$W <- ifelse(weather_filtered$WindGustDir == 'W',1,0)
+weather_filtered$WNW <- ifelse(weather_filtered$WindGustDir == 'WNW',1,0)
+weather_filtered$WSW <- ifelse(weather_filtered$WindGustDir == 'WSW',1,0)
+
+fit <- glm(Rain~woomera+williamtown+waggawagga+townsville+sydneyairport+sydney+sale+perthairport+perth+norfolkisland+moree+melbourne+melbourneairport+dartmoor+canberra+brisbane+AvgTemp+MinTemp+Evaporation+Sunshine+WindGustSpeed+ENE+N+NE+NNE+NNW+S+SSW+SW+W+WNW+WSW, data = weather_filtered, family = "binomial")
+
+probs <- predict(fit, type="response")
+pred <- ifelse(probs>0.25,1,0)
+truth <- weather_filtered$Rain
+
+table(truth = truth, prediction = pred) %>% addmargins
+class_diag(probs, truth, 0.25)
+```
+*Diagnostic variables of the model with only significant LASSO'd variables included are all ever so slightly worse than those for the model with all variables included.*
+
+### 10-Fold Cross Validation of Regression Using LASSO Selected Predictors
+
+```{r}
+# 10-fold cross validation on LASSO'd logistic regression
+
+set.seed(8008135) #I'm an adult, I promise
+k = 10
+
+data1 <- weather_filtered %>% .[sample(nrow(.)), ]
+folds = cut(seq(1:nrow(data1)), breaks=k, labels=F)
+diags <- NULL
+
+for (i in 1:k){
+  train <- data1[folds != i,]
+  test <- data1[folds == i,]
+  truth <- test$Rain
+  
+  fit <- glm(Rain~woomera+williamtown+waggawagga+townsville+sydneyairport+sydney+sale+perthairport+perth+norfolkisland+moree+melbourne+melbourneairport+dartmoor+canberra+brisbane+AvgTemp+MinTemp+Evaporation+Sunshine+WindGustSpeed+ENE+N+NE+NNE+NNW+S+SSW+SW+W+WNW+WSW, data = train, family = "binomial")
+  probs <- predict(fit, newdata = test, type="response")
+  
+  diags <- rbind(diags, class_diag(probs, truth, cutoff = 0.25))
+}
+
+diags %>% summarise_all(mean, na.rm=T)
+```
+*Performing 10-fold cross validation of this model once again produces diagnostic variables that differ very little from the in-sample diagnostic tests. Oddly enough, the out-of-sample diagnostics, specifically AUC, decreased after performing our LASSO tests and removing insignificant variables. This decrease in AUC is so minute though that its trade-off with decreased model complexity may be seen as acceptable.*
+
+
+
