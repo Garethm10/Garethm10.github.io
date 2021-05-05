@@ -13,7 +13,7 @@
       <pubDate>Wed, 05 May 2021 00:00:00 +0000</pubDate>
       
       <guid>/post/2021/05/05/my-blog-post/</guid>
-      <description></description>
+      <description>library(ggplot2)trees &amp;lt;- treesggplot(trees,aes(Girth, Height)) + geom_point(aes(color=Volume)) + scale_color_gradient(low = &amp;quot;red&amp;quot;, high = &amp;quot;green&amp;quot; )import numpy as npprint(&amp;quot;The average girth of the trees is &amp;quot; + str(np.mean(r.trees[&amp;quot;Girth&amp;quot;])) + &amp;quot;\n&amp;quot;)## The average girth of the trees is 13.248387096774195print(&amp;quot;The average height of the trees is \n&amp;quot; + str(np.mean(r.trees[&amp;quot;Height&amp;quot;])) + &amp;quot;\n&amp;quot;)## The average height of the trees is ## 76.0print(&amp;quot;The average volume of the trees is &amp;quot; + str(np.</description>
     </item>
     
     <item>

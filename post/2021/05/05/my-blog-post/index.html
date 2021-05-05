@@ -72,7 +72,19 @@
               
 
 
+<pre class="r"><code>library(ggplot2)
 
+trees &lt;- trees
+ggplot(trees,aes(Girth, Height)) + geom_point(aes(color=Volume)) + scale_color_gradient(low = &quot;red&quot;, high = &quot;green&quot; )</code></pre>
+<p><img src="/post/2021-05-05-my-blog-post_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<pre class="python"><code>import numpy as np
+print(&quot;The average girth of the trees is &quot; + str(np.mean(r.trees[&quot;Girth&quot;])) + &quot;\n&quot;)</code></pre>
+<pre><code>## The average girth of the trees is 13.248387096774195</code></pre>
+<pre class="python"><code>print(&quot;The average height of the trees is \n&quot; + str(np.mean(r.trees[&quot;Height&quot;])) + &quot;\n&quot;)</code></pre>
+<pre><code>## The average height of the trees is 
+## 76.0</code></pre>
+<pre class="python"><code>print(&quot;The average volume of the trees is &quot; + str(np.mean(r.trees[&quot;Volume&quot;])) + &quot;\n&quot;)</code></pre>
+<pre><code>## The average volume of the trees is 30.17096774193548</code></pre>
 
             
         <hr>         <div class="related-posts">

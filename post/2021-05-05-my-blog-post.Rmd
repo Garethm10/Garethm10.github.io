@@ -7,3 +7,24 @@ categories: []
 tags: []
 description: ''
 ---
+```{r setup, include=F}
+library(reticulate)
+```
+
+
+```{r}
+library(ggplot2)
+
+trees <- trees
+ggplot(trees,aes(Girth, Height)) + geom_point(aes(color=Volume)) + scale_color_gradient(low = "red", high = "green" )
+```
+
+
+```{python}
+import numpy as np
+print("The average girth of the trees is " + str(np.mean(r.trees["Girth"])) + "\n")
+
+print("The average height of the trees is \n" + str(np.mean(r.trees["Height"])) + "\n")
+
+print("The average volume of the trees is " + str(np.mean(r.trees["Volume"])) + "\n")
+```
