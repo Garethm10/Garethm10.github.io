@@ -1,0 +1,48 @@
+baseurl = "/"
+languageCode = "en-US"
+title = "Gareth Meredith"
+# Enable comments by entering your Disqus shortname
+disqusShortname = ""
+# Enable Google Analytics by entering your tracking code
+googleAnalytics = ""
+theme = "hugo-sustain"
+
+[permalinks]
+  post = "/post/:year/:month/:day/:slug"
+
+[params]
+  avatar = "Me.jpg"
+  author = "Gareth Meredith"
+  occupation = "Computational Software Engineer"
+  about = "I love Scientific Programming and Many of its Endless Applications!"
+
+  # Custom assets can be linked with their paths relative to static/
+  custom_css = []
+  custom_js  = []
+
+[params.social]
+  Github        = "Garethm10"
+  Email         = "gareth.meredith10@gmail.com"
+#  Twitter       = "username"
+  LinkedIn      = "gareth-meredith-990450174"
+  Instagram     = "garethm10"
+#  Stackoverflow = "username"
+#  Medium        = "username"
+#  Telegram      = "username"
+
+## Main Menu
+[[menu.main]]
+  name = "blog"
+  weight = 100
+  identifier = "blog"
+  url = "/post/"
+[[menu.main]]
+  name = "projects"
+  identifier = "projects"
+  weight = 200
+  url = "/project/"
+[[menu.main]]
+  name = "resume"
+  identifier = "resume"
+  weight = 300
+  url = "/resume/"
